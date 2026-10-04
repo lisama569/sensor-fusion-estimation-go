@@ -304,12 +304,20 @@ func (e *Engine) processOne(m *Measurement, newRejections *[]*RejectError) {
 func (e *Engine) Advance(target float64) (*model.State, []*RejectError, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	st, rejs, _, err := e.advanceLocked(target)
+	return st, rejs, err
+}
 
+// advanceLocked is the lock-free body of Advance. It additionally returns the
+// due measurements that were actually processed (fused or evaluated as
+// probes) at this step, which lets the Session layer maintain its bounded
+// memory of processed samples. Caller must hold e.mu.
+func (e *Engine) advanceLocked(target float64) (*model.State, []*RejectError, []*Measurement, error) {
 	if math.IsNaN(target) || math.IsInf(target, 0) {
-		return nil, nil, errors.New("engine: Advance target time is NaN/Inf")
+		return nil, nil, nil, errors.New("engine: Advance target time is NaN/Inf")
 	}
 	if target < e.f.Time() {
-		return nil, nil, errors.New("engine: Advance cannot move backwards in time")
+		return nil, nil, nil, errors.New("engine: Advance cannot move backwards in time")
 	}
 
 	newRejections := make([]*RejectError, 0)
@@ -324,7 +332,7 @@ func (e *Engine) Advance(target float64) (*model.State, []*RejectError, error) {
 	for _, m := range due {
 		if m.Time > e.f.Time() {
 			if err := e.f.Predict(m.Time); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			e.stats.Predicts++
 		}
@@ -333,12 +341,12 @@ func (e *Engine) Advance(target float64) (*model.State, []*RejectError, error) {
 
 	if target > e.f.Time() {
 		if err := e.f.Predict(target); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		e.stats.Predicts++
 	}
 
-	return e.f.State(), newRejections, nil
+	return e.f.State(), newRejections, due, nil
 }
 
 // State returns a snapshot copy of the current state.
