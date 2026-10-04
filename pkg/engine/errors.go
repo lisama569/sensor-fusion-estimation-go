@@ -57,6 +57,12 @@ const (
 	// ReasonOutOfGate: NIS exceeded the innovation gate; the sample is
 	// withheld from the estimate (a soft reject, not an isolation by itself).
 	ReasonOutOfGate RejectReason = "out_of_gate"
+	// ReasonAlreadyProcessed: the exact (source, timestamp) pair was already
+	// fused before an archive boundary or in an earlier offline replay batch.
+	// Refused at the session layer so a measurement can never be fused twice.
+	// Distinct from duplicate_timestamp (two copies within one processing
+	// batch) and from expired_measurement (too old to be usable at all).
+	ReasonAlreadyProcessed RejectReason = "already_processed"
 )
 
 // RejectError records why a measurement was refused instead of being fused.
@@ -75,4 +81,11 @@ func (e *RejectError) Error() string {
 
 func reject(source string, t float64, reason RejectReason, detail string) *RejectError {
 	return &RejectError{Source: source, Time: t, Reason: reason, Detail: detail}
+}
+
+// Reject builds a typed rejection. It is exported so layers above the engine
+// (e.g. the session package) can produce rejections with the same type and
+// machine-readable reason taxonomy.
+func Reject(source string, t float64, reason RejectReason, detail string) *RejectError {
+	return reject(source, t, reason, detail)
 }

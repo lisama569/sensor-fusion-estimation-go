@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 
@@ -50,6 +51,34 @@ func (m *ConstantVelocity) Predict(x *mat.Vector, dt float64) (*mat.Matrix, *mat
 		{0, q * d * d / 2, 0, q * d},
 	})
 	return fx, F, Q, nil
+}
+
+// ConstantVelocityKind is the stable archive kind of ConstantVelocity.
+const ConstantVelocityKind = "constant_velocity/v1"
+
+// cvParams is the serialized parameter layout of ConstantVelocity.
+type cvParams struct {
+	QPSD float64 `json:"qpsd"`
+}
+
+// Kind implements Serializable.
+func (m *ConstantVelocity) Kind() string { return ConstantVelocityKind }
+
+// Params implements Serializable.
+func (m *ConstantVelocity) Params() ([]byte, error) {
+	return jsonParams(cvParams{QPSD: m.QPSD})
+}
+
+func decodeConstantVelocity(raw []byte) (any, error) {
+	var p cvParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	return &ConstantVelocity{QPSD: p.QPSD}, nil
+}
+
+func init() {
+	RegisterMotionDecoder(ConstantVelocityKind, decodeConstantVelocity)
 }
 
 var _ MotionModel = (*ConstantVelocity)(nil)

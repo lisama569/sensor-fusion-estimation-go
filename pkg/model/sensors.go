@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 
@@ -31,6 +32,36 @@ func (s *LinearPosition) Measure(x *mat.Vector) (*mat.Vector, *mat.Matrix, error
 
 // Noise implements MeasurementModel.
 func (s *LinearPosition) Noise() *mat.Matrix { return s.R }
+
+// LinearPositionKind is the stable archive kind of LinearPosition.
+const LinearPositionKind = "linear_position/v1"
+
+type linearPositionParams struct {
+	R [][]float64 `json:"r"`
+}
+
+// Kind implements Serializable.
+func (s *LinearPosition) Kind() string { return LinearPositionKind }
+
+// Params implements Serializable.
+func (s *LinearPosition) Params() ([]byte, error) {
+	if s.R == nil {
+		return nil, errors.New("linearposition: nil noise covariance")
+	}
+	rows := make([][]float64, s.R.Rows)
+	for i := range rows {
+		rows[i] = s.R.Slice(i)
+	}
+	return jsonParams(linearPositionParams{R: rows})
+}
+
+func decodeLinearPosition(raw []byte) (any, error) {
+	var p linearPositionParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	return &LinearPosition{R: mat.From(p.R)}, nil
+}
 
 // RangeBearing is a nonlinear range/bearing measurement relative to a sensor
 // placed at (Sx, Sy):
@@ -67,6 +98,43 @@ func (s *RangeBearing) Measure(x *mat.Vector) (*mat.Vector, *mat.Matrix, error) 
 
 // Noise implements MeasurementModel.
 func (s *RangeBearing) Noise() *mat.Matrix { return s.R }
+
+// RangeBearingKind is the stable archive kind of RangeBearing.
+const RangeBearingKind = "range_bearing/v1"
+
+type rangeBearingParams struct {
+	Sx float64     `json:"sx"`
+	Sy float64     `json:"sy"`
+	R  [][]float64 `json:"r"`
+}
+
+// Kind implements Serializable.
+func (s *RangeBearing) Kind() string { return RangeBearingKind }
+
+// Params implements Serializable.
+func (s *RangeBearing) Params() ([]byte, error) {
+	if s.R == nil {
+		return nil, errors.New("rangebearing: nil noise covariance")
+	}
+	rows := make([][]float64, s.R.Rows)
+	for i := range rows {
+		rows[i] = s.R.Slice(i)
+	}
+	return jsonParams(rangeBearingParams{Sx: s.Sx, Sy: s.Sy, R: rows})
+}
+
+func decodeRangeBearing(raw []byte) (any, error) {
+	var p rangeBearingParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	return &RangeBearing{Sx: p.Sx, Sy: p.Sy, R: mat.From(p.R)}, nil
+}
+
+func init() {
+	RegisterMeasurementDecoder(LinearPositionKind, decodeLinearPosition)
+	RegisterMeasurementDecoder(RangeBearingKind, decodeRangeBearing)
+}
 
 var (
 	_ MeasurementModel = (*LinearPosition)(nil)
